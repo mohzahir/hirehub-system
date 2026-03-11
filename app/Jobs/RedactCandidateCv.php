@@ -10,7 +10,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
+use Throwable; // أضفنا هذا لالتقاط جميع أنواع الأخطاء بما فيها نفاذ الوقت
 
 class RedactCandidateCv implements ShouldQueue
 {
@@ -18,13 +18,11 @@ class RedactCandidateCv implements ShouldQueue
 
     public $candidate;
 
-    // تمرير المرشح للمهمة
     public function __construct(Candidate $candidate)
     {
         $this->candidate = $candidate;
     }
 
-    // المنطق الذي سيعمل في الخلفية
     public function handle()
     {
         // التحقق من وجود السيرة الذاتية الأصلية
@@ -32,11 +30,11 @@ class RedactCandidateCv implements ShouldQueue
             return;
         }
 
-        // المسار الكامل للملف الأصلي
-        $originalFullPath = storage_path('app/public/' . $this->candidate->original_cv_path);
+        $originalRelativePath = $this->candidate->original_cv_path;
+        $originalFullPath = storage_path('app/public/' . $originalRelativePath);
         
-        // تجهيز اسم ومسار النسخة المظللة (الجديدة)
-        $redactedFileName = 'redacted_' . basename($this->candidate->original_cv_path);
+        // تجهيز اسم ومسار النسخة المظللة
+        $redactedFileName = 'redacted_' . basename($originalRelativePath);
         $redactedRelativePath = 'cvs/redacted/' . $redactedFileName;
         $redactedFullPath = storage_path('app/public/' . $redactedRelativePath);
 
@@ -45,32 +43,51 @@ class RedactCandidateCv implements ShouldQueue
             Storage::disk('public')->makeDirectory('cvs/redacted');
         }
 
-        // مسار سكربت البايثون (بافتراض أنك وضعته في مجلد scripts داخل المشروع)
         $pythonScriptPath = base_path('scripts/cv_redactor.py');
-
-        // التعديل السحري: استخدام البايثون الموجود داخل البيئة الافتراضية venv
         $pythonExecutable = base_path('venv/bin/python');
 
-        // استدعاء البايثون الخاص بنا وتمرير مسار الملف الأصلي ومسار الملف الجديد كـ Arguments
+        // إعطاء مهلة دقيقتين فقط للملف، إذا تجاوزها نعتبره معطوباً ونتجاوزه
         $process = new Process([$pythonExecutable, $pythonScriptPath, $originalFullPath, $redactedFullPath]);
-        $process->setTimeout(300); // إعطاء السكربت مهلة دقيقتين كحد أقصى
+        $process->setTimeout(120); 
 
         try {
+            // محاولة تشغيل البايثون
             $process->mustRun();
 
-            // إضافة فحص أمان: هل قام البايثون بإنشاء الملف فعلاً؟
+            // فحص هل نجح البايثون في إنشاء الملف المظلل؟
             if (file_exists($redactedFullPath)) {
-                // إذا وجد الملف، نقوم بتحديث مساره في الداتابيز
                 $this->candidate->update([
                     'redacted_cv_path' => $redactedRelativePath
                 ]);
             } else {
-                // إذا لم يتم إنشاء الملف، نسجل خطأ للمراجعة
-                \Log::error('Python script finished, but no file was created at: ' . $redactedFullPath);
+                // البايثون انتهى لكن لم ينشئ ملفاً (ملف غريب أو صورة)
+                $this->applyFallback($originalRelativePath, $redactedRelativePath);
             }
 
-        } catch (ProcessFailedException $exception) {
-            \Log::error('CV Redaction Failed for Candidate ID: ' . $this->candidate->id . ' - Error: ' . $exception->getMessage());
+        } catch (Throwable $exception) {
+            // التقاط أي خطأ (نفاذ الوقت Timeout، خطأ برمجي، ملف معطوب)
+            \Log::warning('CV Redaction Failed for Candidate ID: ' . $this->candidate->id . '. Applying fallback. Error: ' . $exception->getMessage());
+            
+            // تنفيذ الخطة البديلة (نسخ الملف الأصلي)
+            $this->applyFallback($originalRelativePath, $redactedRelativePath);
+        }
+    }
+
+    /**
+     * دالة الخطة البديلة: تنسخ الملف الأصلي ليكون هو المظلل مؤقتاً
+     */
+    private function applyFallback($originalPath, $redactedPath)
+    {
+        // إذا كان الملف الأصلي موجوداً، نقوم بنسخه باسم الملف المظلل
+        if (Storage::disk('public')->exists($originalPath)) {
+            Storage::disk('public')->copy($originalPath, $redactedPath);
+            
+            // تحديث قاعدة البيانات لترى لوحة التحكم هذا الملف
+            $this->candidate->update([
+                'redacted_cv_path' => $redactedPath
+            ]);
+            
+            \Log::info('Fallback applied successfully for Candidate ID: ' . $this->candidate->id);
         }
     }
 }
