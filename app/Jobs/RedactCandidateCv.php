@@ -48,7 +48,7 @@ class RedactCandidateCv implements ShouldQueue
 
         // إعطاء مهلة دقيقتين فقط للملف، إذا تجاوزها نعتبره معطوباً ونتجاوزه
         $process = new Process([$pythonExecutable, $pythonScriptPath, $originalFullPath, $redactedFullPath]);
-        $process->setTimeout(120); 
+        $process->setTimeout(45); 
 
         try {
             // محاولة تشغيل البايثون
