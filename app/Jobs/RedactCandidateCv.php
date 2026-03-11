@@ -48,8 +48,11 @@ class RedactCandidateCv implements ShouldQueue
         // مسار سكربت البايثون (بافتراض أنك وضعته في مجلد scripts داخل المشروع)
         $pythonScriptPath = base_path('scripts/cv_redactor.py');
 
-        // استدعاء البايثون وتمرير مسار الملف الأصلي ومسار الملف الجديد كـ Arguments
-        $process = new Process(['python', $pythonScriptPath, $originalFullPath, $redactedFullPath]);
+        // التعديل السحري: استخدام البايثون الموجود داخل البيئة الافتراضية venv
+        $pythonExecutable = base_path('venv/bin/python');
+
+        // استدعاء البايثون الخاص بنا وتمرير مسار الملف الأصلي ومسار الملف الجديد كـ Arguments
+        $process = new Process([$pythonExecutable, $pythonScriptPath, $originalFullPath, $redactedFullPath]);
         $process->setTimeout(120); // إعطاء السكربت مهلة دقيقتين كحد أقصى
 
         try {
