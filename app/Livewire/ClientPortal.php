@@ -6,6 +6,7 @@ use Livewire\Component;
 use App\Models\Project;
 use App\Models\Application;
 use Illuminate\Support\Facades\Mail;
+use App\Mail\ClientFeedbackAlert;
 
 class ClientPortal extends Component
 {
