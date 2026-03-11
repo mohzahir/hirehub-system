@@ -53,7 +53,7 @@ class RedactCandidateCv implements ShouldQueue
 
         // استدعاء البايثون الخاص بنا وتمرير مسار الملف الأصلي ومسار الملف الجديد كـ Arguments
         $process = new Process([$pythonExecutable, $pythonScriptPath, $originalFullPath, $redactedFullPath]);
-        $process->setTimeout(120); // إعطاء السكربت مهلة دقيقتين كحد أقصى
+        $process->setTimeout(300); // إعطاء السكربت مهلة دقيقتين كحد أقصى
 
         try {
             $process->mustRun();
