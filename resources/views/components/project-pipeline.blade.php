@@ -20,55 +20,52 @@
         </div>
     @endif
 
-    <div class="mb-6 bg-white p-4 rounded-lg shadow-sm border-r-4 border-blue-600 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center">
-        <div>
-            <h2 class="text-xl lg:text-2xl font-bold text-gray-800">{{ $project->title }}</h2>
-            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 mt-1">
-                <p class="text-sm lg:text-base text-gray-500">
-                    العميل: <span class="font-semibold">{{ $project->client->company_name ?? 'غير محدد' }}</span> | 
-                    العدد المطلوب: <span class="font-semibold">{{ $project->required_count }}</span>
-                </p>
-                
-                {{-- <div class="flex items-center gap-2">
-                    <button wire:click="generateClientLink" class="text-[10px] lg:text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-bold py-1 px-2 rounded transition flex items-center gap-1">
-                        🔗 توليد رابط بوابة العميل
-                    </button>
-                    @if($clientMagicLink)
-                        <div class="relative flex items-center">
-                            <input type="text" readonly value="{{ $clientMagicLink }}" id="clientLink" class="w-48 text-[10px] border border-indigo-200 p-1 rounded bg-white text-gray-600 focus:outline-none" dir="ltr">
-                            <button onclick="let copyText = document.getElementById('clientLink'); copyText.select(); document.execCommand('copy'); alert('تم نسخ الرابط السري للعميل!');" class="absolute right-0 bg-indigo-600 text-white text-[10px] font-bold py-1 px-2 rounded-l">نسخ</button>
-                        </div>
-                    @endif
-                </div> --}}
+    <div class="mb-4 bg-white p-3 rounded-lg shadow-sm border-r-4 border-blue-600 flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
+        <div class="flex-shrink-0">
+            <h2 class="text-lg lg:text-xl font-bold text-gray-800">{{ $project->title }}</h2>
+            <div class="flex items-center gap-2 mt-0.5">
+                <span class="text-xs text-gray-500">العميل: <strong class="text-gray-700">{{ $project->client->company_name ?? 'غير محدد' }}</strong></span>
+                <span class="text-gray-300">|</span>
+                <span class="text-xs text-gray-500">المطلوب: <strong class="text-gray-700">{{ $project->required_count }}</strong></span>
             </div>
         </div>
         
-        <div class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center w-full lg:w-auto">
+        <div class="flex flex-col sm:flex-row gap-3 items-center w-full md:w-auto">
             @if(count($selectedApplications) > 0)
-                <div class="flex gap-2 w-full sm:w-auto bg-blue-50 p-1 rounded-lg border border-blue-100">
-                    <button wire:click="openSendBatchModal" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded transition shadow-sm flex items-center justify-center gap-1 text-xs lg:text-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                        إرسال للعميل ({{ count($selectedApplications) }})
+                <div class="flex gap-1 w-full sm:w-auto bg-blue-50 p-1 rounded border border-blue-100">
+                    <button wire:click="openSendBatchModal" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-3 rounded shadow-sm flex items-center justify-center gap-1 text-[11px] transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        إرسال ({{ count($selectedApplications) }})
                     </button>
-                    
-                    <button wire:click="openInterviewModal" class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded transition shadow-sm flex items-center justify-center gap-1 text-xs lg:text-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        جدولة مقابلة
+                    <button wire:click="openInterviewModal" class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded shadow-sm flex items-center justify-center gap-1 text-[11px] transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        جدولة
                     </button>
                 </div>
             @endif
 
-            <button wire:click="openCandidateModal" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition shadow-sm text-sm lg:text-base">
-                + إضافة مرشح
-            </button>
-            <button wire:click="openExistingModal" class="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded transition shadow-sm text-sm lg:text-base flex items-center justify-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                استيراد من السيرفر
-            </button>
-            <button wire:click="openAiBatchModal" class="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition shadow-sm flex items-center justify-center gap-2 text-sm lg:text-base">
-                <svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                AI CVs
-            </button>
+            <div class="flex w-full sm:w-auto gap-2">
+                <div class="inline-flex rounded-md shadow-sm flex-1 sm:flex-none" role="group">
+                    <button wire:click="openCandidateModal" class="flex-1 sm:flex-none px-3 py-1.5 text-[11px] font-bold text-blue-700 bg-white border border-gray-200 rounded-r-md hover:bg-blue-50 focus:z-10 focus:ring-1 focus:ring-blue-500 transition flex items-center justify-center gap-1" title="إضافة مرشح يدوياً">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span class="hidden sm:inline">جديد</span>
+                    </button>
+                    <button wire:click="openExistingModal" class="flex-1 sm:flex-none px-3 py-1.5 text-[11px] font-bold text-slate-700 bg-white border-t border-b border-gray-200 hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-slate-500 transition flex items-center justify-center gap-1" title="استيراد من قاعدة البيانات">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <span class="hidden sm:inline">استيراد</span>
+                    </button>
+                    <button wire:click="openAiBatchModal" class="flex-1 sm:flex-none px-3 py-1.5 text-[11px] font-bold text-purple-700 bg-white border border-gray-200 rounded-l-md hover:bg-purple-50 focus:z-10 focus:ring-1 focus:ring-purple-500 transition flex items-center justify-center gap-1" title="رفع سير ذاتية بالذكاء الاصطناعي">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        AI CVs
+                    </button>
+                </div>
+
+                <button wire:click="scoreCandidates" class="flex-1 sm:flex-none bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-3 rounded shadow-sm text-[11px] transition flex items-center justify-center gap-1" wire:loading.attr="disabled" wire:target="scoreCandidates">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span wire:loading.remove wire:target="scoreCandidates">مطابقة ذكية</span>
+                    <span wire:loading wire:target="scoreCandidates">جاري التقييم...</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -109,6 +106,31 @@
                                     </button>
                                 </div>
                             </div>
+
+                            @if($application->match_score !== null)
+                                <div x-data="{ open: false }" class="mb-3">
+                                    <div @click="open = !open" class="flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded w-max cursor-pointer transition-all border shadow-sm select-none
+                                        {{ $application->match_score >= 80 ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : ($application->match_score >= 50 ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100') }}">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        مطابقة: {{ $application->match_score }}%
+                                        
+                                        <svg class="w-3 h-3 transition-transform duration-300 ml-1 opacity-70" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
+                                    
+                                    <div x-show="open" 
+                                        x-transition:enter="transition ease-out duration-200"
+                                        x-transition:enter-start="opacity-0 -translate-y-2"
+                                        x-transition:enter-end="opacity-100 translate-y-0"
+                                        x-transition:leave="transition ease-in duration-150"
+                                        x-transition:leave-start="opacity-100 translate-y-0"
+                                        x-transition:leave-end="opacity-0 -translate-y-2"
+                                        style="display: none;" 
+                                        class="p-2 mt-1.5 text-[10px] text-gray-700 bg-white rounded-lg border border-gray-200 shadow-inner leading-relaxed">
+                                        <strong class="text-gray-900 block mb-1">💡 تحليل الذكاء الاصطناعي:</strong> 
+                                        {{ $application->match_reason }}
+                                    </div>
+                                </div>
+                            @endif
 
                             @if($application->is_sent)
                                 <div class="mb-2">
@@ -480,7 +502,7 @@
 
                     @if($has_partner)
                         <div class="mb-5 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <label class="block text-gray-800 text-sm font-bold mb-3">الجهة التي استلمت الرسوم (المُحصِّل):</label>
+                            <label class="block text-gray-800 text-sm font-bold mb-3">الجهة التي استلمت الرسوم (المُحصِّل):</label>
                             <div class="flex gap-6">
                                 <label class="flex items-center gap-2 cursor-pointer">
                                     <input type="radio" wire:model.live="fee_collector" value="hirehub" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
