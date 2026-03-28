@@ -11,6 +11,10 @@ class Candidate extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'ai_summary' => 'array',
+    ];
+
     // المرشح قد يتبع لمكتب شريك
     public function partner()
     {

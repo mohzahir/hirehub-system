@@ -44,7 +44,15 @@ class RedactCandidateCv implements ShouldQueue
         }
 
         $pythonScriptPath = base_path('scripts/cv_redactor.py');
-        $pythonExecutable = base_path('venv/bin/python');
+        
+        // اكتشاف نظام التشغيل تلقائياً وتحديد مسار بايثون الصحيح
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            // مسار الويندوز
+            $pythonExecutable = base_path('venv\\Scripts\\python.exe');
+        } else {
+            // مسار لينكس / ماك (سيرفر Hostinger)
+            $pythonExecutable = base_path('venv/bin/python');
+        }
 
         // إعطاء مهلة دقيقتين فقط للملف، إذا تجاوزها نعتبره معطوباً ونتجاوزه
         $process = new Process([$pythonExecutable, $pythonScriptPath, $originalFullPath, $redactedFullPath]);

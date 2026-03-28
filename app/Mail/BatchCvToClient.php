@@ -17,11 +17,14 @@ class BatchCvToClient extends Mailable
 
     public $applications;
     public $project;
+    public $summaryFilePath; // 1. إضافة متغير ملف الإكسيل
 
-    public function __construct(Collection $applications, Project $project)
+    // 2. تحديث البنّاء لاستقبال مسار الملف الجديد
+    public function __construct(Collection $applications, Project $project, $summaryFilePath = null)
     {
         $this->applications = $applications;
         $this->project = $project;
+        $this->summaryFilePath = $summaryFilePath;
     }
 
     public function envelope(): Envelope
@@ -34,7 +37,7 @@ class BatchCvToClient extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.batch_cvs', // سنقوم بإنشاء هذا الملف
+            view: 'emails.batch_cvs', 
         );
     }
 
@@ -42,7 +45,14 @@ class BatchCvToClient extends Mailable
     {
         $attachments = [];
 
-        // الدوران على كل المرشحين المحددين وإرفاق ملفاتهم المظللة
+        // 3. إرفاق ملف الإكسيل (الملخص) أولاً ليكون في واجهة الإيميل
+        if ($this->summaryFilePath && file_exists($this->summaryFilePath)) {
+            $attachments[] = Attachment::fromPath($this->summaryFilePath)
+                ->as('Candidates_Summary.csv')
+                ->withMime('text/csv');
+        }
+
+        // 4. الدوران على كل المرشحين المحددين وإرفاق ملفاتهم المظللة (كودك الأصلي الجميل)
         foreach ($this->applications as $application) {
             if ($application->candidate->redacted_cv_path) {
                 $fullPath = storage_path('app/public/' . $application->candidate->redacted_cv_path);

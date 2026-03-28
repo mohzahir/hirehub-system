@@ -260,11 +260,11 @@ class ProjectPipeline extends Component
     }
 
     
-
+    // معالجة الملفات بالذكاء الاصطناعي
     // معالجة الملفات بالذكاء الاصطناعي
     public function processAiBatch()
     {
-        // 1. زيادة وقت التنفيذ المسموح به إلى 5 دقائق (300 ثانية) لتجنب انقطاع العملية
+        // 1. زيادة وقت التنفيذ المسموح به إلى 5 دقائق
         set_time_limit(300);
 
         $this->validate([
@@ -278,7 +278,7 @@ class ProjectPipeline extends Component
         $apiKey = env('GEMINI_API_KEY');
         $successCount = 0;
         $skippedCount = 0;
-        $failedCount = 0; // لمعرفة عدد الملفات التي لم يتم التعرف عليها
+        $failedCount = 0;
 
         foreach ($this->batch_cv_files as $file) {
             try {
@@ -292,14 +292,20 @@ class ProjectPipeline extends Component
                 email (ضعها null إذا لم تجدها),
                 nationality (الجنسية بالانجليزية), 
                 profession (المهنة أو التخصص بالانجليزية), 
-                experience_years (سنوات الخبرة كرقم صحيح integer، إذا لم تكن واضحة ضع 0).";
+                experience_years (سنوات الخبرة كرقم صحيح integer، إذا لم تكن واضحة ضع 0),
+                education (أعلى درجة علمية وتخصصها، مثال: بكالوريوس هندسة كمبيوتر),
+                top_skills (أهم 5 مهارات يمتاز بها، مفصولة بفاصلة),
+                languages (اللغات التي يجيدها),
+                current_location (مكان إقامته الحالي),
+                brief_summary (ملخص احترافي جذاب للمرشح في سطرين باللغة العربية يبرز نقاط قوته).";
 
-                // 2. إضافة حد زمني (timeout) محدد للاتصال بالـ API لكي لا يعلق النظام
-                // قم بتعديل هذا الكود:
-                $response = Http::withoutVerifying()->timeout(60)->withHeaders([
+                // استخدام موديل gemini-1.5-flash المستقر والمخصص لبيئات العمل الحقيقية
+                $response = Http::withoutVerifying()
+                    ->retry(3, 3000)
+                    ->timeout(60)
+                    ->withHeaders([
                     'Content-Type' => 'application/json',
-                ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=' . $apiKey, [
-                    // ... باقي الكود كما هو
+                ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey, [
                     'contents' => [
                         [
                             'parts' => [
@@ -323,6 +329,12 @@ class ProjectPipeline extends Component
                     
                     if (isset($geminiResult['candidates'][0]['content']['parts'][0]['text'])) {
                         $jsonText = $geminiResult['candidates'][0]['content']['parts'][0]['text'];
+                        
+                        // --- التنظيف السحري ---
+                        // إزالة علامات ```json و ``` التي يضيفها الذكاء الاصطناعي أحياناً
+                        $jsonText = str_replace(['```json', '```', '```JSON'], '', $jsonText);
+                        $jsonText = trim($jsonText);
+
                         $extractedData = json_decode($jsonText, true);
 
                         if ($extractedData) {
@@ -330,14 +342,12 @@ class ProjectPipeline extends Component
                             $lastName = $extractedData['last_name'] ?? 'غير محدد';
                             $nationality = $extractedData['nationality'] ?? 'غير محدد';
 
-                            // 1. هل المرشح الذي قرأه الذكاء الاصطناعي موجود مسبقاً في السيستم؟
                             $candidate = \App\Models\Candidate::where('first_name', $firstName)
                                 ->where('last_name', $lastName)
                                 ->where('nationality', $nationality)
                                 ->first();
 
                             if (!$candidate) {
-                                // غير موجود، ننشئ له سجلاً ونحفظ ملفه
                                 $cvPath = $file->store('cvs', 'public');
                                 $candidate = \App\Models\Candidate::create([
                                     'first_name' => $firstName,
@@ -347,18 +357,23 @@ class ProjectPipeline extends Component
                                     'profession' => $extractedData['profession'] ?? 'غير محدد',
                                     'experience_years' => $extractedData['experience_years'] ?? 0,
                                     'original_cv_path' => $cvPath,
-                                    'partner_id' => $this->batch_partner_id ?: null, // السطر الجديد
+                                    'partner_id' => $this->batch_partner_id ?: null,
+                                    'ai_summary' => [
+                                        'education' => $extractedData['education'] ?? 'غير مذكور',
+                                        'top_skills' => $extractedData['top_skills'] ?? 'غير مذكور',
+                                        'languages' => $extractedData['languages'] ?? 'غير مذكور',
+                                        'current_location' => $extractedData['current_location'] ?? 'غير مذكور',
+                                        'brief_summary' => $extractedData['brief_summary'] ?? 'لا يوجد ملخص',
+                                    ]
                                 ]);
                                 \App\Jobs\RedactCandidateCv::dispatch($candidate);
                             }
 
-                            // 2. فحص التكرار في المشروع الحالي
                             $applicationExists = \App\Models\Application::where('candidate_id', $candidate->id)
                                 ->where('project_id', $this->project->id)
                                 ->exists();
 
                             if (!$applicationExists) {
-                                // إضافته للمشروع
                                 \App\Models\Application::create([
                                     'candidate_id' => $candidate->id,
                                     'project_id' => $this->project->id,
@@ -366,22 +381,26 @@ class ProjectPipeline extends Component
                                 ]);
                                 $successCount++;
                             } else {
-                                // المرشح مكرر في هذا المشروع، نتخطاه!
-                                // تأكد من تعريف هذا المتغير $skippedCount = 0; خارج حلقة foreach
                                 $skippedCount++; 
                             }
                         } else {
+                            // تسجيل الخطأ الفعلي إذا لم يفهم الـ JSON
+                            \Log::error('AI JSON Decode Failed. Raw Text: ' . $jsonText);
                             $failedCount++;
                         }
                     } else {
+                        // تسجيل الخطأ إذا اختلفت بنية رد Gemini
+                        \Log::error('AI Response Structure Invalid: ' . json_encode($geminiResult));
                         $failedCount++;
                     }
                 } else {
+                    // تسجيل الخطأ إذا رفض الـ API الطلب (مثلاً انتهت الباقة أو طلب سريع جداً)
+                    \Log::error('Gemini API HTTP Error: ' . $response->status() . ' - ' . $response->body());
                     $failedCount++;
                 }
             } catch (\Exception $e) {
-                // إذا حدث أي خطأ في ملف معين (مثل كبر حجمه)، يتم تسجيل الخطأ وتخطي الملف للذي بعده
-                \Log::error('AI Batch Process Error for a file: ' . $e->getMessage());
+                // تسجيل أي أخطاء برمجية أخرى
+                \Log::error('AI Batch Process Exception: ' . $e->getMessage());
                 $failedCount++;
             }
         }
@@ -522,13 +541,15 @@ class ProjectPipeline extends Component
     }
 
     // دالة الإرسال الجماعي (تبقى كما هي تقريباً مع تعديل بسيط)
+    // دالة الإرسال الجماعي عبر الإيميل مع ملخص إكسيل
+    // دالة الإرسال الجماعي عبر الإيميل مع ملخص إكسيل
     public function sendBatchToClient()
     {
         $applications = Application::with('candidate')->whereIn('id', $this->selectedApplications)->get();
         $clientEmail = $this->project->client->contact_email;
         $ccArray = array_filter(array_map('trim', explode(',', $this->ccEmails)));
 
-        // فحص أمان أخير: التأكد من أن جميع المحددين لديهم ملفات مظللة جاهزة
+        // فحص أمان: التأكد من أن جميع المحددين لديهم ملفات مظللة
         foreach ($applications as $app) {
             if (!$app->candidate->redacted_cv_path) {
                 session()->flash('error', 'عفواً، المرشح (' . $app->candidate->first_name . ') لم تكتمل معالجة سيرته الذاتية بعد. يرجى الانتظار أو إزالته من التحديد.');
@@ -536,11 +557,56 @@ class ProjectPipeline extends Component
             }
         }
 
+        // --- بداية سحر الإكسيل (توليد ملف الملخص آلياً) ---
+        $fileName = 'Candidates_Summary_' . Str::slug($this->project->title) . '_' . date('Y-m-d') . '.csv';
+        $filePath = storage_path('app/public/' . $fileName);
+        $file = fopen($filePath, 'w');
+        
+        // دعم اللغة العربية
+        fputs($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+        
+        // كتابة عناوين الأعمدة الاحترافية في الإكسيل
+        fputcsv($file, [
+            'الاسم الكامل', 
+            'المهنة / التخصص', 
+            'الجنسية', 
+            'مكان الإقامة',
+            'سنوات الخبرة', 
+            'أعلى مؤهل علمي',
+            'أهم المهارات',
+            'اللغات',
+            'نبذة عن المرشح (Summary)'
+        ]);
+        
+        // تعبئة بيانات المرشحين
+        foreach ($applications as $app) {
+            $fullName = $app->candidate->first_name . ' ' . $app->candidate->last_name;
+            
+            // سحب البيانات الإضافية إذا كانت موجودة (للمرشحين الجدد) أو وضع قيمة افتراضية للقدامى
+            $aiData = $app->candidate->ai_summary ?? [];
+            
+            fputcsv($file, [
+                $fullName,
+                $app->candidate->profession,
+                $app->candidate->nationality,
+                $aiData['current_location'] ?? 'غير محدد',
+                $app->candidate->experience_years,
+                $aiData['education'] ?? 'غير محدد',
+                $aiData['top_skills'] ?? 'غير محدد',
+                $aiData['languages'] ?? 'غير محدد',
+                $aiData['brief_summary'] ?? 'غير محدد'
+            ]);
+        }
+        fclose($file);
+        // --- نهاية توليد الإكسيل ---
+
         try {
+            // إرسال الإيميل مع تمرير مسار ملف الإكسيل كمتغير
             Mail::to($clientEmail)
                 ->cc($ccArray)
-                ->send(new BatchCvToClient($applications, $this->project));
+                ->send(new BatchCvToClient($applications, $this->project, $filePath));
 
+            // تحديث حالة المرشحين
             foreach ($applications as $app) {
                 $app->update([
                     'status' => 'sent_to_client',
@@ -548,7 +614,7 @@ class ProjectPipeline extends Component
                 ]);
             }
 
-            session()->flash('message', 'تم مراجعة وإرسال ' . $applications->count() . ' سير ذاتية للعميل بنجاح!');
+            session()->flash('message', 'تم إرسال ' . $applications->count() . ' سير ذاتية مع الإكسيل للمراجعة بنجاح!');
             
             $this->selectedApplications = [];
             $this->closeSendBatchModal();

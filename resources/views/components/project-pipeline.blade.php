@@ -29,7 +29,7 @@
                     العدد المطلوب: <span class="font-semibold">{{ $project->required_count }}</span>
                 </p>
                 
-                <div class="flex items-center gap-2">
+                {{-- <div class="flex items-center gap-2">
                     <button wire:click="generateClientLink" class="text-[10px] lg:text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-bold py-1 px-2 rounded transition flex items-center gap-1">
                         🔗 توليد رابط بوابة العميل
                     </button>
@@ -39,7 +39,7 @@
                             <button onclick="let copyText = document.getElementById('clientLink'); copyText.select(); document.execCommand('copy'); alert('تم نسخ الرابط السري للعميل!');" class="absolute right-0 bg-indigo-600 text-white text-[10px] font-bold py-1 px-2 rounded-l">نسخ</button>
                         </div>
                     @endif
-                </div>
+                </div> --}}
             </div>
         </div>
         
