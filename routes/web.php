@@ -34,7 +34,7 @@ Route::get('/apply/{project}', \App\Livewire\PublicJobPage::class)->name('job.ap
 Route::middleware(['auth'])->group(function () {
     
     // ضع كل المسارات الخاصة بك هنا
-    Route::get('/', function () { return view('dashboard'); }); 
+    // Route::get('/', function () { return view('dashboard'); }); 
     Route::get('/projects', \App\Livewire\ProjectsList::class)->name('projects');
     Route::get('/clients', \App\Livewire\ClientsList::class)->name('clients');
     Route::get('/project/{id}/pipeline', \App\Livewire\ProjectPipeline::class)->name('project.pipeline');

@@ -46,10 +46,10 @@
 
             <div class="flex w-full sm:w-auto gap-2">
                 <div class="inline-flex rounded-md shadow-sm flex-1 sm:flex-none" role="group">
-                    <button wire:click="openCandidateModal" class="flex-1 sm:flex-none px-3 py-1.5 text-[11px] font-bold text-blue-700 bg-white border border-gray-200 rounded-r-md hover:bg-blue-50 focus:z-10 focus:ring-1 focus:ring-blue-500 transition flex items-center justify-center gap-1" title="إضافة مرشح يدوياً">
+                    {{-- <button wire:click="openCandidateModal" class="flex-1 sm:flex-none px-3 py-1.5 text-[11px] font-bold text-blue-700 bg-white border border-gray-200 rounded-r-md hover:bg-blue-50 focus:z-10 focus:ring-1 focus:ring-blue-500 transition flex items-center justify-center gap-1" title="إضافة مرشح يدوياً">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                         <span class="hidden sm:inline">جديد</span>
-                    </button>
+                    </button> --}}
                     <button wire:click="openExistingModal" class="flex-1 sm:flex-none px-3 py-1.5 text-[11px] font-bold text-slate-700 bg-white border-t border-b border-gray-200 hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-slate-500 transition flex items-center justify-center gap-1" title="استيراد من قاعدة البيانات">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                         <span class="hidden sm:inline">استيراد</span>
@@ -85,9 +85,9 @@
                         <div class="bg-white p-3 lg:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition">
                             <div class="flex justify-between items-start mb-2">
                                 <div class="flex items-center gap-2">
-                                    @if(!$application->is_sent)
+                                    {{-- @if(!$application->is_sent) --}}
                                         <input type="checkbox" wire:model.live="selectedApplications" value="{{ $application->id }}" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300 shadow-sm">
-                                    @endif
+                                    {{-- @endif --}}
                                     <h4 class="font-bold text-blue-900 text-sm lg:text-base {{ $application->is_sent ? 'ml-1' : '' }}">{{ $application->candidate->first_name }} {{ $application->candidate->last_name }}</h4>
                                 </div>
                                 
