@@ -43,6 +43,7 @@ Route::middleware(['auth'])->group(function () {
     ->middleware(['auth', 'can:is-admin']) // تمت إضافة الحماية هنا
     ->name('collections');
     Route::get('/invoice/{id}', [\App\Http\Controllers\InvoiceController::class, 'show'])->name('invoice.show');
+    Route::get('/reports', \App\Livewire\ReportsDashboard::class)->name('reports.dashboard');
 });
 
 require __DIR__.'/auth.php';

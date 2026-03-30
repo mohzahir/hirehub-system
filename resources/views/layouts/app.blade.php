@@ -69,6 +69,18 @@
                 </ul>
             </div>
 
+            <div>
+                <p class="px-3 text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">التقارير والمتابعة</p>
+                <ul class="space-y-1">
+                    <li>
+                        <a href="/reports" class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200 {{ request()->is('reports') ? 'bg-blue-600 text-white shadow-md font-bold' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            لوحة التقارير
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
             @can('is-admin')
             <div>
                 <p class="px-3 text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">الإدارة المالية</p>
