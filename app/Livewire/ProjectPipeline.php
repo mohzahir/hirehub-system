@@ -177,7 +177,7 @@ class ProjectPipeline extends Component
     public function saveManualRedaction()
     {
         $this->validate([
-            'manual_redacted_cv' => 'required|file|mimes:pdf|max:5120',
+            'manual_redacted_cv' => 'required|file|mimes:pdf|max:15360',
         ]);
 
         $application = Application::with('candidate')->find($this->previewApplicationId);
@@ -269,7 +269,7 @@ class ProjectPipeline extends Component
 
         $this->validate([
             'batch_cv_files' => 'required|array|min:1',
-            'batch_cv_files.*' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'batch_cv_files.*' => 'required|file|mimes:pdf,jpg,jpeg,png|max:15360',
         ], [
             'batch_cv_files.required' => 'الرجاء انتظار اكتمال رفع الملفات قبل الضغط على بدء التحليل.',
             'batch_cv_files.array' => 'حدث خطأ في قراءة الملفات.',
@@ -649,7 +649,7 @@ class ProjectPipeline extends Component
             'nationality' => 'required|string|max:255',
             'profession' => 'required|string|max:255',
             'experience_years' => 'required|integer|min:0',
-            'cv_file' => 'required|file|mimes:pdf,doc,docx|max:5120',
+            'cv_file' => 'required|file|mimes:pdf,doc,docx|max:15360',
         ]);
 
         // 1. الفحص على مستوى السيستم: هل المرشح موجود مسبقاً؟
