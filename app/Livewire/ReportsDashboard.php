@@ -4,13 +4,19 @@ namespace App\Livewire;
 
 use Livewire\Component;
 use App\Models\Project;
+use App\Models\Client;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportsDashboard extends Component
 {
+    // متغيرات تقرير المشروع
     public $selectedProjectId = '';
+    
+    // متغيرات تقرير العميل
+    public $selectedClientId = '';
 
-    public function downloadReport()
+    // 1. دالة تحميل تقرير المشروع (القديمة)
+    public function downloadProjectReport()
     {
         $this->validate([
             'selectedProjectId' => 'required|exists:projects,id'
@@ -18,26 +24,45 @@ class ReportsDashboard extends Component
             'selectedProjectId.required' => 'الرجاء اختيار مشروع من القائمة أولاً.'
         ]);
 
-        // جلب بيانات المشروع مع العميل والمرشحين
         $project = Project::with(['client', 'applications.candidate'])->findOrFail($this->selectedProjectId);
 
-        // إعداد خيارات الـ PDF
         $pdf = Pdf::loadView('reports.project_report', ['project' => $project]);
-        $pdf->setPaper('A4', 'landscape'); // جعل الصفحة بالعرض لتستوعب الجدول المليء بالبيانات
+        $pdf->setPaper('A4', 'landscape');
 
-        // تنزيل الملف مباشرة
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf->stream();
         }, 'Project_Status_Report_' . date('Y-m-d') . '.pdf');
     }
 
+    // 2. دالة تحميل تقرير العميل الشامل (الجديدة)
+    public function downloadClientReport()
+    {
+        $this->validate([
+            'selectedClientId' => 'required|exists:clients,id'
+        ], [
+            'selectedClientId.required' => 'الرجاء اختيار عميل (مستشفى) من القائمة أولاً.'
+        ]);
+
+        // جلب العميل مع جميع مشاريعه، وداخل كل مشروع نجلب المرشحين
+        $client = Client::with(['projects.applications.candidate'])->findOrFail($this->selectedClientId);
+
+        $pdf = Pdf::loadView('reports.client_report', ['client' => $client]);
+        $pdf->setPaper('A4', 'landscape');
+
+        return response()->streamDownload(function () use ($pdf) {
+            echo $pdf->stream();
+        }, 'Client_Comprehensive_Report_' . date('Y-m-d') . '.pdf');
+    }
+
     public function render()
     {
-        // جلب المشاريع لعرضها في القائمة المنسدلة
+        // جلب البيانات للقوائم المنسدلة
         $projects = Project::with('client')->latest()->get();
+        $clients = Client::latest()->get();
         
         return view('components.reports-dashboard', [
-            'projects' => $projects
+            'projects' => $projects,
+            'clients' => $clients
         ])->layout('layouts.app', ['title' => 'لوحة التقارير']);
     }
 }
