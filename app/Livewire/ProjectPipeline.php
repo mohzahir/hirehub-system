@@ -823,13 +823,18 @@ class ProjectPipeline extends Component
             return;
         }
 
-        // زيادة مهلة السكربت ككل إلى 5 دقائق
         set_time_limit(300); 
         $apiKey = env('GEMINI_API_KEY');
-        $totalScored = 0;
-        $hasError = false;
+        
+        // فحص سريع للتأكد من وجود مفتاح الـ API
+        if(empty($apiKey)) {
+            session()->flash('error', 'مفتاح GEMINI_API_KEY غير موجود في ملف .env!');
+            return;
+        }
 
-        // تقسيم المرشحين إلى دفعات (5 مرشحين في كل طلب) لتخفيف الضغط وتسريع الرد
+        $totalScored = 0;
+        $errorMessage = ''; // متغير جديد لتخزين رسالة الخطأ الدقيقة
+
         $chunks = $unscoredApplications->chunk(5);
 
         foreach ($chunks as $chunk) {
@@ -860,7 +865,7 @@ class ProjectPipeline extends Component
             try {
                 $response = Http::withoutVerifying()
                     ->retry(3, 3000)
-                    ->timeout(120) // تم رفع مهلة الانتظار لـ 120 ثانية لكل دفعة
+                    ->timeout(120)
                     ->withHeaders(['Content-Type' => 'application/json'])
                     ->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey, [
                     'contents' => [['parts' => [['text' => $prompt]]]],
@@ -888,23 +893,22 @@ class ProjectPipeline extends Component
                                 }
                             }
                         } else {
-                            \Log::error('Match Scoring Decode Error: ' . $cleanJson);
-                            $hasError = true;
+                            $errorMessage = 'فشل في تحويل الـ JSON (Decode Error).';
                         }
                     } else {
-                        \Log::error('Match Scoring Regex Failed: ' . $jsonText);
-                        $hasError = true;
+                        $errorMessage = 'الذكاء الاصطناعي لم يرجع البيانات بصيغة مصفوفة صحيحة.';
                     }
                 } else {
-                    \Log::error('Match Scoring API Error: ' . $response->body());
-                    $hasError = true;
+                    // هنا السحر: التقاط رسالة الخطأ من جوجل!
+                    $errorMessage = 'خطأ من جوجل (API Error): ' . $response->status() . ' - ' . $response->body();
+                    break; // نوقف الحلقة لأن هناك خطأ حقيقي من السيرفر
                 }
             } catch (\Exception $e) {
-                \Log::error('Match Scoring Exception: ' . $e->getMessage());
-                $hasError = true;
+                // التقاط أخطاء الاتصال بالإنترنت أو نفاذ الوقت (Timeouts)
+                $errorMessage = 'خطأ في الاتصال (Connection Exception): ' . $e->getMessage();
+                break;
             }
             
-            // استراحة ثانية واحدة بين كل دفعة وأخرى لتجنب حظر Rate Limit
             sleep(1);
         }
 
@@ -912,12 +916,13 @@ class ProjectPipeline extends Component
 
         if ($totalScored > 0) {
             $msg = 'تم تقييم مطابقة ' . $totalScored . ' مرشحين بنجاح!';
-            if ($hasError) {
-                $msg .= ' (تعذر تقييم بعض المرشحين، حاول التقييم مرة أخرى للمتبقين).';
+            if ($errorMessage) {
+                $msg .= ' (ملاحظة: تعذر تقييم البقية بسبب: ' . $errorMessage . ')';
             }
             session()->flash('message', $msg);
         } else {
-            session()->flash('error', 'تعذر الاتصال بخدمة التقييم أو معالجة البيانات حالياً. يرجى المحاولة مرة أخرى.');
+            // عرض الخطأ التقني الدقيق على الشاشة!
+            session()->flash('error', 'فشل التقييم. السبب: ' . $errorMessage);
         }
     }
 
