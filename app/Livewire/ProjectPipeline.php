@@ -823,78 +823,101 @@ class ProjectPipeline extends Component
             return;
         }
 
-        $candidatesData = [];
-        foreach ($unscoredApplications as $app) {
-            $aiSummary = $app->candidate->ai_summary ?? [];
-            $candidatesData[] = [
-                'app_id' => $app->id,
-                'profession' => $app->candidate->profession,
-                'experience' => $app->candidate->experience_years,
-                'skills' => $aiSummary['top_skills'] ?? '',
-                'education' => $aiSummary['education'] ?? '',
-            ];
-        }
+        // زيادة مهلة السكربت ككل إلى 5 دقائق
+        set_time_limit(300); 
+        $apiKey = env('GEMINI_API_KEY');
+        $totalScored = 0;
+        $hasError = false;
 
-        $prompt = "أنت خبير توظيف. لديك الوصف الوظيفي التالي: \n" . $this->project->description . "\n\n";
-        $prompt .= "ولديك قائمة المرشحين التالية بصيغة JSON: \n" . json_encode($candidatesData, JSON_UNESCAPED_UNICODE) . "\n\n";
-        $prompt .= "المطلوب: قم وتقييم مدى مطابقة كل مرشح للوصف الوظيفي بناءً على خبراته ومهاراته. أرجع النتيجة بصيغة مصفوفة JSON Array فقط. لا تكتب أي كلمة خارج المصفوفة.
-        التنسيق المطلوب:
-        [
-            {
-                \"app_id\": رقم_المرشح,
-                \"match_score\": نسبة_المطابقة_من_0_إلى_100,
-                \"match_reason\": \"سبب التقييم في سطر واحد باللغة العربية\"
+        // تقسيم المرشحين إلى دفعات (5 مرشحين في كل طلب) لتخفيف الضغط وتسريع الرد
+        $chunks = $unscoredApplications->chunk(5);
+
+        foreach ($chunks as $chunk) {
+            $candidatesData = [];
+            foreach ($chunk as $app) {
+                $aiSummary = $app->candidate->ai_summary ?? [];
+                $candidatesData[] = [
+                    'app_id' => $app->id,
+                    'profession' => $app->candidate->profession,
+                    'experience' => $app->candidate->experience_years,
+                    'skills' => $aiSummary['top_skills'] ?? '',
+                    'education' => $aiSummary['education'] ?? '',
+                ];
             }
-        ]";
 
-        try {
-            set_time_limit(120);
-            $response = Http::withoutVerifying()
-                ->retry(3, 3000)
-                ->timeout(60)
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . env('GEMINI_API_KEY'), [
-                'contents' => [['parts' => [['text' => $prompt]]]],
-                'generationConfig' => ['response_mime_type' => 'application/json']
-            ]);
+            $prompt = "أنت خبير توظيف. لديك الوصف الوظيفي التالي: \n" . $this->project->description . "\n\n";
+            $prompt .= "ولديك قائمة المرشحين التالية بصيغة JSON: \n" . json_encode($candidatesData, JSON_UNESCAPED_UNICODE) . "\n\n";
+            $prompt .= "المطلوب: قم وتقييم مدى مطابقة كل مرشح للوصف الوظيفي بناءً على خبراته ومهاراته. أرجع النتيجة بصيغة مصفوفة JSON Array فقط. لا تكتب أي كلمة خارج المصفوفة.
+            التنسيق المطلوب:
+            [
+                {
+                    \"app_id\": رقم_المرشح,
+                    \"match_score\": نسبة_المطابقة_من_0_إلى_100,
+                    \"match_reason\": \"سبب التقييم في سطر واحد باللغة العربية\"
+                }
+            ]";
 
-            if ($response->successful()) {
-                $geminiResult = $response->json();
-                $jsonText = $geminiResult['candidates'][0]['content']['parts'][0]['text'] ?? '';
-                
-                // استخراج مصفوفة الـ JSON بالقوة الجبرية باستخدام Regex
-                preg_match('/\[\s*\{.*\}\s*\]/s', $jsonText, $matches);
-                
-                if (!empty($matches)) {
-                    $cleanJson = $matches[0];
-                    $scores = json_decode($cleanJson, true);
+            try {
+                $response = Http::withoutVerifying()
+                    ->retry(3, 3000)
+                    ->timeout(120) // تم رفع مهلة الانتظار لـ 120 ثانية لكل دفعة
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey, [
+                    'contents' => [['parts' => [['text' => $prompt]]]],
+                    'generationConfig' => ['response_mime_type' => 'application/json']
+                ]);
 
-                    if (is_array($scores)) {
-                        foreach ($scores as $scoreData) {
-                            if (isset($scoreData['app_id']) && isset($scoreData['match_score'])) {
-                                Application::where('id', $scoreData['app_id'])->update([
-                                    'match_score' => $scoreData['match_score'],
-                                    'match_reason' => $scoreData['match_reason'] ?? 'تم التقييم آلياً',
-                                ]);
+                if ($response->successful()) {
+                    $geminiResult = $response->json();
+                    $jsonText = $geminiResult['candidates'][0]['content']['parts'][0]['text'] ?? '';
+                    
+                    preg_match('/\[\s*\{.*\}\s*\]/s', $jsonText, $matches);
+                    
+                    if (!empty($matches)) {
+                        $cleanJson = $matches[0];
+                        $scores = json_decode($cleanJson, true);
+
+                        if (is_array($scores)) {
+                            foreach ($scores as $scoreData) {
+                                if (isset($scoreData['app_id']) && isset($scoreData['match_score'])) {
+                                    Application::where('id', $scoreData['app_id'])->update([
+                                        'match_score' => $scoreData['match_score'],
+                                        'match_reason' => $scoreData['match_reason'] ?? 'تم التقييم آلياً',
+                                    ]);
+                                    $totalScored++;
+                                }
                             }
+                        } else {
+                            \Log::error('Match Scoring Decode Error: ' . $cleanJson);
+                            $hasError = true;
                         }
-                        $this->project->refresh();
-                        session()->flash('message', 'تم تقييم مطابقة ' . count($scores) . ' مرشحين بنجاح!');
                     } else {
-                        \Log::error('JSON Decode Error after Regex. Cleaned JSON: ' . $cleanJson);
-                        session()->flash('error', 'حدث خطأ في معالجة تقييم الذكاء الاصطناعي.');
+                        \Log::error('Match Scoring Regex Failed: ' . $jsonText);
+                        $hasError = true;
                     }
                 } else {
-                    \Log::error('Regex Failed to extract JSON. Raw AI Response: ' . $jsonText);
-                    session()->flash('error', 'الذكاء الاصطناعي أرجع بيانات غير صالحة، حاول مرة أخرى.');
+                    \Log::error('Match Scoring API Error: ' . $response->body());
+                    $hasError = true;
                 }
-            } else {
-                \Log::error('Gemini API Error: ' . $response->body());
-                session()->flash('error', 'مشكلة في الاتصال بسيرفر الذكاء الاصطناعي.');
+            } catch (\Exception $e) {
+                \Log::error('Match Scoring Exception: ' . $e->getMessage());
+                $hasError = true;
             }
-        } catch (\Exception $e) {
-            \Log::error('Match Scoring Exception: ' . $e->getMessage());
-            session()->flash('error', 'تعذر الاتصال بخدمة التقييم حالياً.');
+            
+            // استراحة ثانية واحدة بين كل دفعة وأخرى لتجنب حظر Rate Limit
+            sleep(1);
+        }
+
+        $this->project->refresh();
+
+        if ($totalScored > 0) {
+            $msg = 'تم تقييم مطابقة ' . $totalScored . ' مرشحين بنجاح!';
+            if ($hasError) {
+                $msg .= ' (تعذر تقييم بعض المرشحين، حاول التقييم مرة أخرى للمتبقين).';
+            }
+            session()->flash('message', $msg);
+        } else {
+            session()->flash('error', 'تعذر الاتصال بخدمة التقييم أو معالجة البيانات حالياً. يرجى المحاولة مرة أخرى.');
         }
     }
 
