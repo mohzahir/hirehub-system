@@ -264,8 +264,8 @@ class ProjectPipeline extends Component
     // معالجة الملفات بالذكاء الاصطناعي
     public function processAiBatch()
     {
-        // 1. زيادة وقت التنفيذ المسموح به إلى 5 دقائق
-        set_time_limit(300);
+        // 1. إعطاء مهلة طويلة جداً للسكربت (10 دقائق) لضمان عدم توقفه أثناء معالجة الكميات الكبيرة
+        set_time_limit(600);
 
         $this->validate([
             'batch_cv_files' => 'required|array|min:1',
@@ -281,11 +281,13 @@ class ProjectPipeline extends Component
         $failedCount = 0;
 
         foreach ($this->batch_cv_files as $file) {
+            $originalFileName = $file->getClientOriginalName(); // جلب اسم الملف للديبق
+            
             try {
                 $fileData = base64_encode(file_get_contents($file->getRealPath()));
                 $mimeType = $file->getMimeType();
 
-                $prompt = "قم باستخراج البيانات التالية من هذه السيرة الذاتية ورجعها بصيغة JSON فقط وبدون أي نصوص إضافية. 
+                $prompt = "قم باستخراج البيانات التالية من هذه السيرة الذاتية ورجعها بصيغة كائن JSON (JSON Object) فقط وبدون أي نصوص إضافية أو مقدمات. 
                 المفاتيح المطلوبة هي:
                 first_name (الاسم الأول بالانجليزية), 
                 last_name (اسم العائلة بالانجليزية), 
@@ -299,10 +301,10 @@ class ProjectPipeline extends Component
                 current_location (مكان إقامته الحالي),
                 brief_summary (ملخص احترافي جذاب للمرشح في سطرين باللغة العربية يبرز نقاط قوته).";
 
-                // استخدام موديل gemini-1.5-flash المستقر والمخصص لبيئات العمل الحقيقية
+                // رفعنا الـ timeout إلى 120 ثانية للملف الواحد تحسباً للملفات الثقيلة
                 $response = Http::withoutVerifying()
                     ->retry(3, 3000)
-                    ->timeout(60)
+                    ->timeout(120)
                     ->withHeaders([
                     'Content-Type' => 'application/json',
                 ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey, [
@@ -330,88 +332,101 @@ class ProjectPipeline extends Component
                     if (isset($geminiResult['candidates'][0]['content']['parts'][0]['text'])) {
                         $jsonText = $geminiResult['candidates'][0]['content']['parts'][0]['text'];
                         
-                        // --- التنظيف السحري ---
-                        // إزالة علامات ```json و ``` التي يضيفها الذكاء الاصطناعي أحياناً
-                        $jsonText = str_replace(['```json', '```', '```JSON'], '', $jsonText);
-                        $jsonText = trim($jsonText);
+                        // --- التنظيف السحري الجديد باستخدام Regex ---
+                        // هذا الكود يبحث عن أول { وآخر } ويستخرج ما بينهما فقط، متجاهلاً أي نصوص إضافية
+                        preg_match('/\{[\s\S]*\}/', $jsonText, $matches);
+                        
+                        if (!empty($matches)) {
+                            $cleanJson = $matches[0];
+                            $extractedData = json_decode($cleanJson, true);
 
-                        $extractedData = json_decode($jsonText, true);
+                            if ($extractedData) {
+                                $firstName = $extractedData['first_name'] ?? 'غير محدد';
+                                $lastName = $extractedData['last_name'] ?? 'غير محدد';
+                                $nationality = $extractedData['nationality'] ?? 'غير محدد';
 
-                        if ($extractedData) {
-                            $firstName = $extractedData['first_name'] ?? 'غير محدد';
-                            $lastName = $extractedData['last_name'] ?? 'غير محدد';
-                            $nationality = $extractedData['nationality'] ?? 'غير محدد';
+                                $candidate = \App\Models\Candidate::where('first_name', $firstName)
+                                    ->where('last_name', $lastName)
+                                    ->where('nationality', $nationality)
+                                    ->first();
 
-                            $candidate = \App\Models\Candidate::where('first_name', $firstName)
-                                ->where('last_name', $lastName)
-                                ->where('nationality', $nationality)
-                                ->first();
+                                if (!$candidate) {
+                                    $cvPath = $file->store('cvs', 'public');
+                                    $candidate = \App\Models\Candidate::create([
+                                        'first_name' => $firstName,
+                                        'last_name' => $lastName,
+                                        'email' => $extractedData['email'] ?? null,
+                                        'nationality' => $nationality,
+                                        'profession' => $extractedData['profession'] ?? 'غير محدد',
+                                        'experience_years' => (int) ($extractedData['experience_years'] ?? 0),
+                                        'original_cv_path' => $cvPath,
+                                        'partner_id' => $this->batch_partner_id ?: null,
+                                        'ai_summary' => [
+                                            'education' => $extractedData['education'] ?? 'غير مذكور',
+                                            'top_skills' => $extractedData['top_skills'] ?? 'غير مذكور',
+                                            'languages' => $extractedData['languages'] ?? 'غير مذكور',
+                                            'current_location' => $extractedData['current_location'] ?? 'غير مذكور',
+                                            'brief_summary' => $extractedData['brief_summary'] ?? 'لا يوجد ملخص',
+                                        ]
+                                    ]);
+                                    \App\Jobs\RedactCandidateCv::dispatch($candidate);
+                                }
 
-                            if (!$candidate) {
-                                $cvPath = $file->store('cvs', 'public');
-                                $candidate = \App\Models\Candidate::create([
-                                    'first_name' => $firstName,
-                                    'last_name' => $lastName,
-                                    'email' => $extractedData['email'] ?? null,
-                                    'nationality' => $nationality,
-                                    'profession' => $extractedData['profession'] ?? 'غير محدد',
-                                    'experience_years' => $extractedData['experience_years'] ?? 0,
-                                    'original_cv_path' => $cvPath,
-                                    'partner_id' => $this->batch_partner_id ?: null,
-                                    'ai_summary' => [
-                                        'education' => $extractedData['education'] ?? 'غير مذكور',
-                                        'top_skills' => $extractedData['top_skills'] ?? 'غير مذكور',
-                                        'languages' => $extractedData['languages'] ?? 'غير مذكور',
-                                        'current_location' => $extractedData['current_location'] ?? 'غير مذكور',
-                                        'brief_summary' => $extractedData['brief_summary'] ?? 'لا يوجد ملخص',
-                                    ]
-                                ]);
-                                \App\Jobs\RedactCandidateCv::dispatch($candidate);
-                            }
+                                $applicationExists = \App\Models\Application::where('candidate_id', $candidate->id)
+                                    ->where('project_id', $this->project->id)
+                                    ->exists();
 
-                            $applicationExists = \App\Models\Application::where('candidate_id', $candidate->id)
-                                ->where('project_id', $this->project->id)
-                                ->exists();
-
-                            if (!$applicationExists) {
-                                \App\Models\Application::create([
-                                    'candidate_id' => $candidate->id,
-                                    'project_id' => $this->project->id,
-                                    'status' => 'received',
-                                ]);
-                                $successCount++;
+                                if (!$applicationExists) {
+                                    \App\Models\Application::create([
+                                        'candidate_id' => $candidate->id,
+                                        'project_id' => $this->project->id,
+                                        'status' => 'received',
+                                    ]);
+                                    $successCount++;
+                                } else {
+                                    $skippedCount++; 
+                                }
                             } else {
-                                $skippedCount++; 
+                                // تسجيل خطأ الديكود مع اسم الملف
+                                \Log::error("CV Batch Error [$originalFileName] - AI JSON Decode Failed. Cleaned Text: " . $cleanJson);
+                                $failedCount++;
                             }
                         } else {
-                            // تسجيل الخطأ الفعلي إذا لم يفهم الـ JSON
-                            \Log::error('AI JSON Decode Failed. Raw Text: ' . $jsonText);
+                            // فشل الـ Regex في العثور على JSON
+                            \Log::error("CV Batch Error [$originalFileName] - Regex could not find JSON object. Raw Text: " . $jsonText);
                             $failedCount++;
                         }
                     } else {
-                        // تسجيل الخطأ إذا اختلفت بنية رد Gemini
-                        \Log::error('AI Response Structure Invalid: ' . json_encode($geminiResult));
+                        \Log::error("CV Batch Error [$originalFileName] - AI Response Structure Invalid.");
                         $failedCount++;
                     }
                 } else {
-                    // تسجيل الخطأ إذا رفض الـ API الطلب (مثلاً انتهت الباقة أو طلب سريع جداً)
-                    \Log::error('Gemini API HTTP Error: ' . $response->status() . ' - ' . $response->body());
+                    // الديبق الذهبي: طباعة كود الخطأ الذي يرسله Gemini!
+                    \Log::error("CV Batch API Error [$originalFileName] - HTTP Status: " . $response->status() . " Body: " . $response->body());
                     $failedCount++;
                 }
             } catch (\Exception $e) {
-                // تسجيل أي أخطاء برمجية أخرى
-                \Log::error('AI Batch Process Exception: ' . $e->getMessage());
+                // تسجيل أي أخطاء برمجية أو مهلات (Timeouts)
+                \Log::error("CV Batch Exception [$originalFileName] - " . $e->getMessage());
                 $failedCount++;
             }
+
+            // استراحة المحارب: إيقاف السكربت لثانيتين بعد كل ملف لتجنب حظر جوجل (Rate Limiting)
+            sleep(2); 
         }
 
         $this->project->refresh();
         
         $msg = "تم إضافة ($successCount) مرشح بنجاح.";
-        if ($skippedCount > 0) $msg .= " وتم تخطي ($skippedCount) مرشح لأنهم موجودون مسبقاً.";
+        if ($skippedCount > 0) $msg .= " وتم تخطي ($skippedCount) لأنهم موجودون مسبقاً.";
         if ($failedCount > 0) $msg .= " وتعذر قراءة ($failedCount) ملف.";
         
-        session()->flash('message', $msg);
+        if ($failedCount > 0) {
+            session()->flash('error', $msg . ' (يرجى مراجعة ملف الـ Log لمعرفة سبب الفشل بدقة).');
+        } else {
+            session()->flash('message', $msg);
+        }
+        
         $this->closeAiBatchModal();
     }
 
